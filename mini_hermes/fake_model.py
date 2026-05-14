@@ -28,14 +28,27 @@ class FakeModel:
     def create(self, **kwargs):
         messages = kwargs["messages"]
         has_tool_result = any(message.get("role") == "tool" for message in messages)
+        loaded_skill = any(
+            message.get("role") == "tool"
+            and message.get("name") == "skill_view"
+            and "systematic-debugging" in message.get("content", "")
+            for message in messages
+        )
         if not has_tool_result:
             user_text = messages[-1]["content"].lower()
-            if "list" in user_text or "列" in user_text:
+            if "debug" in user_text or "bug" in user_text or "报错" in user_text or "排查" in user_text:
+                msg = _message(tool_calls=[_tool_call("skill_view", {"name": "systematic-debugging"})])
+            elif "list" in user_text or "列" in user_text:
                 msg = _message(tool_calls=[_tool_call("list_files", {"path": "."})])
             elif "shell" in user_text or "命令" in user_text:
                 msg = _message(tool_calls=[_tool_call("run_shell", {"command": "pwd"})])
             else:
                 msg = _message(tool_calls=[_tool_call("read_file", {"path": "README.md"})])
+        elif loaded_skill and not any(
+            message.get("role") == "tool" and message.get("name") == "read_file"
+            for message in messages
+        ):
+            msg = _message(tool_calls=[_tool_call("read_file", {"path": "README.md"}, call_id="call_2")])
         else:
             last_tool = next(message for message in reversed(messages) if message.get("role") == "tool")
             try:

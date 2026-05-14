@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 
 from .agent import MiniAgent
+from .skills import SkillLoader
 
 
 def load_dotenv(path: Path = Path(".env")) -> None:
@@ -28,6 +29,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--chat", action="store_true", help="Keep one multi-turn conversation in the terminal.")
     parser.add_argument("--model", default=None, help="Model name for OpenAI-compatible API.")
     parser.add_argument("--base-url", default=None, help="OpenAI-compatible base URL.")
+    parser.add_argument("--list-skills", action="store_true", help="List available skills and exit.")
     return parser
 
 
@@ -37,7 +39,16 @@ def main() -> None:
     args = build_parser().parse_args()
     message = " ".join(args.message)
 
-    agent = MiniAgent(fake=args.fake, model=args.model, base_url=args.base_url)
+    if args.list_skills:
+        for skill in SkillLoader().list_skills():
+            print(f"{skill.slug}\t{skill.description}")
+        return
+
+    agent = MiniAgent(
+        fake=args.fake,
+        model=args.model,
+        base_url=args.base_url,
+    )
     if not args.chat:
         print(agent.run(message))
         return

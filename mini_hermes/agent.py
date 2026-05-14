@@ -5,6 +5,7 @@ import os
 from typing import Any, Callable
 
 from .fake_model import FakeModel
+from .skills import Skill, SkillLoader, build_skill_catalog_prompt
 from .tools import ToolRegistry, build_default_registry
 
 
@@ -21,9 +22,11 @@ class MiniAgent:
         max_empty_response_retries: int = 3,
         trace_callback: Callable[[dict[str, Any]], None] | None = None,
         stream_callback: Callable[[str], None] | None = None,
+        skill_loader: SkillLoader | None = None,
     ) -> None:
         self.model = model or os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
-        self.registry = registry or build_default_registry()
+        self.skill_loader = skill_loader or SkillLoader()
+        self.registry = registry or build_default_registry(self.skill_loader)
         self.tools = self.registry.schemas()
         self.valid_tool_names = self.registry.names()
         self.max_iterations = max_iterations
@@ -31,7 +34,9 @@ class MiniAgent:
         self.fake = fake
         self.trace_callback = trace_callback
         self.stream_callback = stream_callback
-        self.messages: list[dict[str, Any]] = [self._system_message()]
+        self.active_skills: list[Skill] = []
+        self.catalog_prompt = build_skill_catalog_prompt(self.skill_loader.list_skills())
+        self.messages: list[dict[str, Any]] = self._initial_messages()
 
         if fake:
             self.client = FakeModel()
@@ -48,11 +53,12 @@ class MiniAgent:
         return self.run_turn(user_message)
 
     def reset(self) -> None:
-        self.messages = [self._system_message()]
+        self.messages = self._initial_messages()
 
     def run_turn(self, user_message: str) -> str:
         self.messages.append({"role": "user", "content": user_message})
         empty_response_retries = 0
+        self._emit_skills_trace()
         self._emit_trace("user_message", {"content": user_message, "messages": self.messages})
 
         for iteration in range(1, self.max_iterations + 1):
@@ -127,6 +133,44 @@ class MiniAgent:
                 "a short final answer. Never return an empty response."
             ),
         }
+
+    def _initial_messages(self) -> list[dict[str, Any]]:
+        messages = [self._system_message()]
+        if self.catalog_prompt:
+            messages.append({
+                "role": "system",
+                "content": self.catalog_prompt,
+            })
+        return messages
+
+    def _emit_skills_trace(self) -> None:
+        if not self.active_skills:
+            return
+        self._emit_trace(
+            "skills_loaded",
+            {
+                "skills": [skill.summary() for skill in self.active_skills],
+                "missing": [],
+            },
+        )
+
+    def _handle_loaded_skill_tool(self, tool_name: str, result_content: str) -> None:
+        if tool_name != "skill_view":
+            return
+        try:
+            payload = json.loads(result_content)
+        except json.JSONDecodeError:
+            return
+        slug = payload.get("slug")
+        if not slug or payload.get("error"):
+            return
+        if any(skill.slug == slug for skill in self.active_skills):
+            return
+        skill = self.skill_loader.find(str(slug))
+        if skill is None:
+            return
+        self.active_skills.append(skill)
+        self._emit_skills_trace()
 
     def _build_api_kwargs(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
         return {
@@ -247,6 +291,7 @@ class MiniAgent:
             "content": result,
         }
         self._emit_trace("tool_result", tool_message)
+        self._handle_loaded_skill_tool(name, result)
         return tool_message
 
     def _emit_trace(self, event_type: str, data: dict[str, Any]) -> None:

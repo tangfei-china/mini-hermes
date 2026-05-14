@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
+from .skills import SkillLoader
+
 
 ToolHandler = Callable[[dict[str, Any]], dict[str, Any]]
 
@@ -104,8 +106,9 @@ def run_shell(args: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def build_default_registry() -> ToolRegistry:
+def build_default_registry(skill_loader: SkillLoader | None = None) -> ToolRegistry:
     registry = ToolRegistry()
+    skill_loader = skill_loader or SkillLoader()
     registry.register(Tool(
         name="read_file",
         description="Read a UTF-8 text file under the current working directory.",
@@ -146,5 +149,44 @@ def build_default_registry() -> ToolRegistry:
         },
         handler=run_shell,
     ))
+    registry.register(Tool(
+        name="skills_list",
+        description="List available skills with their name, slug, description, and path.",
+        parameters={
+            "type": "object",
+            "properties": {},
+            "additionalProperties": False,
+        },
+        handler=lambda _args: {
+            "skills": [skill.summary() for skill in skill_loader.list_skills()],
+            "hint": "Use skill_view with a skill name or slug to load full instructions.",
+        },
+    ))
+    registry.register(Tool(
+        name="skill_view",
+        description="Load full instructions for a skill by name, slug, or directory.",
+        parameters={
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Skill name or slug to load."},
+            },
+            "required": ["name"],
+            "additionalProperties": False,
+        },
+        handler=lambda args: _skill_view(skill_loader, str(args.get("name", ""))),
+    ))
     return registry
 
+
+def _skill_view(loader: SkillLoader, name: str) -> dict[str, Any]:
+    skill = loader.find(name)
+    if skill is None:
+        return {"error": f"skill not found: {name}"}
+    return {
+        "name": skill.name,
+        "slug": skill.slug,
+        "description": skill.description,
+        "path": str(skill.path),
+        "directory": str(skill.directory),
+        "content": skill.content,
+    }

@@ -14,8 +14,8 @@
           <span>Mini Hermes Trace</span>
         </div>
         <nav class="topnav" aria-label="Primary">
-          <span class="topnav-item active">Chat</span>
-          <span class="topnav-item">Agent Trace</span>
+          <button id="chatTab" class="topnav-item active" type="button">Chat</button>
+          <button id="skillsTab" class="topnav-item" type="button">Skills</button>
         </nav>
       </div>
       <div class="topbar-actions">
@@ -26,7 +26,7 @@
       </div>
     </header>
 
-    <main class="workspace">
+    <main id="chatView" class="workspace app-view active">
       <section class="chat-pane" aria-label="Chat">
         <div class="section-header">
           <h1>Chat</h1>
@@ -54,9 +54,25 @@
       </section>
 
       <aside class="trace-pane" aria-label="Agent Trace">
+        <section class="trace-section skills-section" aria-label="Active Skills">
+          <div class="section-header compact">
+            <button id="skillsToggle" class="section-toggle" type="button" aria-expanded="true" aria-controls="activeSkills">
+              <span class="toggle-icon" aria-hidden="true">▾</span>
+              <span>Active Skills</span>
+            </button>
+            <span id="skillsMeta" class="meta">No skills active</span>
+          </div>
+          <div id="activeSkills" class="active-skills empty-state">
+            Auto skills will appear here when the agent loads them.
+          </div>
+        </section>
+
         <section class="trace-section timeline-section" aria-label="Execution Timeline">
           <div class="section-header compact">
-            <h1>Execution Timeline</h1>
+            <button id="timelineToggle" class="section-toggle" type="button" aria-expanded="true" aria-controls="timeline">
+              <span class="toggle-icon" aria-hidden="true">▾</span>
+              <span>Execution Timeline</span>
+            </button>
             <span id="runMeta" class="meta">No run yet</span>
           </div>
           <div id="timeline" class="timeline empty-state">
@@ -64,15 +80,41 @@
           </div>
         </section>
 
-        <section class="trace-section detail-section" aria-label="Step Detail">
-          <div class="section-header compact">
-            <h1>Step Detail</h1>
-            <span id="selectedStatus" class="status muted">idle</span>
-          </div>
-          <div id="detailTitle" class="detail-title">Select a step</div>
-          <pre id="detailJson" class="detail-json">{}</pre>
-        </section>
       </aside>
+    </main>
+
+    <main id="skillsView" class="skills-view app-view">
+      <section class="skills-library" aria-label="Skills Library">
+        <div class="section-header">
+          <h1>Skills</h1>
+          <div class="manager-toolbar">
+            <button id="newSkillButton" class="primary-outline" type="button">New Skill</button>
+            <label class="primary-outline upload-button">
+              Upload SKILL.md
+              <input id="skillUploadInput" type="file" accept=".md,text/markdown,text/plain" />
+            </label>
+            <button id="reloadSkillsButton" class="primary-outline" type="button">Reload</button>
+          </div>
+        </div>
+        <div id="skillsListPanel" class="skills-list-panel"></div>
+      </section>
+
+      <section class="skill-editor-pane" aria-label="Skill Editor">
+        <div class="section-header editor-header">
+          <div>
+            <h1 id="skillEditorTitle">Select a skill</h1>
+            <p id="skillEditorSubtitle" class="meta">Create, edit, upload, or delete custom skills.</p>
+          </div>
+          <div class="editor-actions">
+            <button id="deleteSkillButton" class="danger-outline" type="button">Delete</button>
+            <button id="saveSkillButton" type="button">Save</button>
+          </div>
+        </div>
+        <textarea id="skillEditor" class="skill-editor" spellcheck="false" placeholder="Select a skill or create a new one..."></textarea>
+        <div class="editor-footer">
+          <span id="skillSaveStatus" class="meta">No skill selected</span>
+        </div>
+      </section>
     </main>
 
     <script src="/app.js"></script>

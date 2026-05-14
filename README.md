@@ -20,23 +20,6 @@ uv sync
 uv run python -m unittest -v
 ```
 
-## 提交身份
-
-这个仓库的提交作者应使用：
-
-```bash
-git config user.name "tangfei-china"
-git config user.email "tangfeizz@outlook.com"
-```
-
-提交前可以用下面命令确认，避免把其他全局 Git 身份写进历史：
-
-```bash
-git config user.name
-git config user.email
-git log -1 --format='%an <%ae> | %cn <%ce>'
-```
-
 ## Web 可视化版本
 
 这个项目现在包含一个本地 Web 版本，可以用页面对话，并实时查看 agent 的执行过程：

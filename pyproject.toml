@@ -1,0 +1,19 @@
+[project]
+name = "mini-hermes-agent"
+version = "0.1.0"
+description = "A tiny Hermes-style agent loop for learning tool calling."
+requires-python = ">=3.9"
+dependencies = [
+    "openai>=2.36.0",
+]
+
+[project.scripts]
+mini-hermes = "mini_hermes.cli:main"
+mini-hermes-web = "mini_hermes.web:main"
+
+[tool.setuptools.package-data]
+mini_hermes = ["static/*.html", "static/*.css", "static/*.js"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"

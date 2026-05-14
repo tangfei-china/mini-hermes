@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mini Hermes Trace</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar-left">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <span>Mini Hermes Trace</span>
+        </div>
+        <nav class="topnav" aria-label="Primary">
+          <span class="topnav-item active">Chat</span>
+          <span class="topnav-item">Agent Trace</span>
+        </nav>
+      </div>
+      <div class="topbar-actions">
+        <span id="sessionMeta" class="toolbar-pill">New session</span>
+        <span class="toolbar-pill">gpt-5.5</span>
+        <span id="connection" class="connected">Connected</span>
+        <button id="clearButton" class="primary-outline" type="button">New Chat</button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <section class="chat-pane" aria-label="Chat">
+        <div class="section-header">
+          <h1>Chat</h1>
+          <div class="chat-tools">
+            <label class="mode-toggle">
+              <input id="fakeMode" type="checkbox" />
+              <span>Fake</span>
+            </label>
+          </div>
+        </div>
+
+        <div id="conversation" class="conversation"></div>
+
+        <form id="runForm" class="composer">
+          <textarea id="messageInput" rows="3" placeholder="Message the agent...">读一下 README.md</textarea>
+          <div class="composer-footer">
+            <div class="composer-tools" aria-hidden="true">
+              <span class="tool-button">⌘</span>
+              <span class="tool-button">&lt;/&gt;</span>
+              <span class="tool-button">•••</span>
+            </div>
+            <button id="sendButton" type="submit">Send</button>
+          </div>
+        </form>
+      </section>
+
+      <aside class="trace-pane" aria-label="Agent Trace">
+        <section class="trace-section timeline-section" aria-label="Execution Timeline">
+          <div class="section-header compact">
+            <h1>Execution Timeline</h1>
+            <span id="runMeta" class="meta">No run yet</span>
+          </div>
+          <div id="timeline" class="timeline empty-state">
+            Send a message to inspect the agent loop.
+          </div>
+        </section>
+
+        <section class="trace-section detail-section" aria-label="Step Detail">
+          <div class="section-header compact">
+            <h1>Step Detail</h1>
+            <span id="selectedStatus" class="status muted">idle</span>
+          </div>
+          <div id="detailTitle" class="detail-title">Select a step</div>
+          <pre id="detailJson" class="detail-json">{}</pre>
+        </section>
+      </aside>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

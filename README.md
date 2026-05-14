@@ -20,29 +20,66 @@ uv sync
 uv run python -m unittest -v
 ```
 
-使用真实 OpenAI-compatible 接口：
+## Web 可视化版本
+
+这个项目现在包含一个本地 Web 版本，可以用页面对话，并实时查看 agent 的执行过程：
+
+```bash
+uv run mini-hermes-web
+```
+
+然后打开：
+
+```text
+http://127.0.0.1:8787
+```
+
+Web 页面支持：
+
+- 多轮对话，同一个 session 会保留上下文。
+- 真实模型流式输出，回答会边生成边显示。
+- 工具调用可视化，例如 `read_file`、`list_files`、`run_shell`。
+- 右侧 Trace 面板展示 `messages`、模型响应、工具调用、工具结果和最终回答。
+- `New Chat` 可以创建新的会话。
+- `Fake` 模式可以不使用 API key，直接学习工具调用流程。
+
+Web 和 CLI 使用同一套 `MiniAgent.run_turn()` 对话循环，不是两套实现。
+
+## 真实模型配置
+
+使用真实 OpenAI-compatible 接口前，复制并编辑 `.env`：
 
 ```bash
 cp .env.example .env
 # 编辑 .env，填入 OPENAI_API_KEY / OPENAI_BASE_URL / OPENAI_MODEL
-uv run mini-hermes "看一下 README.md 里写了什么"
 ```
 
 CLI 会默认读取当前目录的 `.env`。也可以继续使用 shell 环境变量，已有环境变量会优先于 `.env`。
+
+## CLI 版本
+
+单轮执行：
+
+```bash
+uv run mini-hermes "看一下 README.md 里写了什么"
+```
+
+多轮对话：
+
+```bash
+uv run mini-hermes --chat "你好"
+```
+
+在 `--chat` 模式中：
+
+- 输入 `/reset` 清空当前上下文。
+- 输入 `/exit` 或 `/quit` 退出。
 
 无 API key 学习工具流程：
 
 ```bash
 uv run mini-hermes --fake "读一下 README.md"
 ```
-
-启动 Web 可视化页面：
-
-```bash
-uv run mini-hermes-web
-```
-
-然后打开 `http://127.0.0.1:8787`。页面会默认读取 `.env`，使用真实模型执行，并展示每一步 `messages`、模型响应、工具调用和工具结果。
 
 ## 推荐断点
 

@@ -32,7 +32,7 @@ Tests use the standard library `unittest` framework. Add new tests in `test_agen
 
 ## Commit & Pull Request Guidelines
 
-This checkout has no `.git` directory, so no local commit convention can be verified. Use concise, imperative commit messages such as `Add shell tool test` or `Handle invalid tool JSON`. Pull requests should describe the behavior change, list verification commands, mention API/config changes, and include CLI output when user-visible behavior changes.
+Use concise, imperative commit messages such as `Add shell tool test` or `Handle invalid tool JSON`. Pull requests should describe the behavior change, list verification commands, mention API/config changes, and include CLI output or screenshots when user-visible behavior changes.
 
 ## Security & Configuration Tips
 

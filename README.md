@@ -43,6 +43,7 @@ http://127.0.0.1:8787
 Web 页面支持：
 
 - 多轮对话，同一个 session 会保留上下文。
+- 历史会话管理：左侧 `History` 会列出最近会话，点击可恢复历史消息并继续对话；历史保存在本地 `.mini_hermes/sessions.json`。
 - 真实模型流式输出，回答会边生成边显示。
 - 工具调用可视化，例如 `read_file`、`list_files`、`run_shell`。
 - Skills 自动加载和可视化：模型可通过 `skills_list` / `skill_view` 自己选择 skill，右侧会显示本轮实际激活的 skill。

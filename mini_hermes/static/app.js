@@ -11,6 +11,8 @@ const runMeta = document.querySelector("#runMeta");
 const sendButton = document.querySelector("#sendButton");
 const clearButton = document.querySelector("#clearButton");
 const sessionMeta = document.querySelector("#sessionMeta");
+const sessionList = document.querySelector("#sessionList");
+const sessionCount = document.querySelector("#sessionCount");
 const activeSkills = document.querySelector("#activeSkills");
 const skillsMeta = document.querySelector("#skillsMeta");
 const skillsToggle = document.querySelector("#skillsToggle");
@@ -37,6 +39,7 @@ let timelineCollapsed = localStorage.getItem("miniHermesTimelineCollapsed") === 
 let skillsCatalog = [];
 let selectedSkillSlug = "";
 let selectedSkillCanDelete = false;
+let sessionsCatalog = [];
 
 function createSessionId() {
   const id = crypto.randomUUID();
@@ -296,6 +299,109 @@ function messageBubble(role, text, tone = "") {
     setCopyButton(item, text);
   }
   return item;
+}
+
+function formatAge(timestamp) {
+  if (!timestamp) return "";
+  const seconds = Math.max(0, (Date.now() / 1000) - Number(timestamp));
+  if (seconds < 60) return "now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+function renderSessions(sessions) {
+  sessionsCatalog = sessions || [];
+  sessionCount.textContent = `${sessionsCatalog.length} session${sessionsCatalog.length === 1 ? "" : "s"}`;
+  sessionList.innerHTML = "";
+  if (!sessionsCatalog.length) {
+    sessionList.className = "session-list empty-state";
+    sessionList.textContent = "Previous chats will appear here.";
+    return;
+  }
+
+  sessionList.className = "session-list";
+  for (const session of sessionsCatalog) {
+    const item = document.createElement("article");
+    item.className = `session-item ${session.id === sessionId ? "active" : ""}`;
+    item.innerHTML = `
+      <button class="session-main" type="button">
+        <span class="session-title"></span>
+        <span class="session-preview"></span>
+        <span class="session-details"></span>
+      </button>
+      <button class="session-delete" type="button" title="Delete session">×</button>
+    `;
+    item.querySelector(".session-title").textContent = session.title || session.id;
+    item.querySelector(".session-preview").textContent = session.preview || "";
+    item.querySelector(".session-details").textContent = `${session.message_count || 0} msgs · ${formatAge(session.updated_at)}${session.fake ? " · fake" : ""}`;
+    item.querySelector(".session-main").addEventListener("click", () => loadSession(session.id));
+    item.querySelector(".session-delete").addEventListener("click", (event) => {
+      event.stopPropagation();
+      deleteSession(session.id);
+    });
+    sessionList.appendChild(item);
+  }
+}
+
+async function loadSessions() {
+  try {
+    const response = await fetch("/api/sessions", { cache: "no-store" });
+    const payload = await response.json();
+    renderSessions(payload.sessions || []);
+  } catch {
+    renderSessions([]);
+  }
+}
+
+function restoreConversation(session) {
+  sessionId = session.id;
+  localStorage.setItem("miniHermesSessionId", sessionId);
+  sessionMeta.textContent = `Session ${sessionId.slice(0, 8)}`;
+  conversation.innerHTML = "";
+  for (const message of session.messages || []) {
+    if (message.role === "user") {
+      conversation.appendChild(messageBubble("You", message.content || ""));
+    }
+    if (message.role === "assistant" && message.content) {
+      conversation.appendChild(messageBubble("Assistant", message.content || ""));
+    }
+  }
+  events = [];
+  selectedStep = null;
+  runMeta.textContent = "Resumed";
+  renderTimeline();
+  renderSessions(sessionsCatalog);
+  conversation.scrollTop = conversation.scrollHeight;
+}
+
+async function loadSession(id) {
+  try {
+    const response = await fetch(`/api/sessions/${encodeURIComponent(id)}`, { cache: "no-store" });
+    const payload = await response.json();
+    if (!response.ok || !payload.ok) throw new Error(payload.error || "Failed to load session");
+    restoreConversation(payload.session);
+  } catch (error) {
+    runMeta.textContent = cleanError(error.message || "Failed to load session");
+  }
+}
+
+async function deleteSession(id) {
+  if (!confirm("Delete this session?")) return;
+  try {
+    const response = await fetch(`/api/sessions/${encodeURIComponent(id)}`, { method: "POST" });
+    const payload = await response.json();
+    if (!response.ok || !payload.ok) throw new Error(payload.error || "Failed to delete session");
+    if (id === sessionId) {
+      startNewChat();
+    }
+    await loadSessions();
+  } catch (error) {
+    runMeta.textContent = cleanError(error.message || "Failed to delete session");
+  }
 }
 
 function appendSkillCard(assistantBubble, event) {
@@ -691,6 +797,11 @@ async function runAgent(message, fake) {
       renderTimeline();
     }
     renderActiveSkills(payload.skills || [], []);
+    if (payload.session) {
+      renderSessions([payload.session, ...sessionsCatalog.filter((session) => session.id !== payload.session.id)]);
+    } else {
+      loadSessions();
+    }
     runMeta.textContent = `${events.length} steps · ${Math.round(performance.now() - started)}ms · ${payload.fake ? "fake" : payload.model}`;
     source.close();
     sendButton.disabled = false;
@@ -735,7 +846,7 @@ messageInput.addEventListener("keydown", (event) => {
   }
 });
 
-clearButton.addEventListener("click", () => {
+function startNewChat() {
   sessionId = createSessionId();
   events = [];
   selectedStep = null;
@@ -744,6 +855,11 @@ clearButton.addEventListener("click", () => {
   renderActiveSkills([], []);
   sessionMeta.textContent = `Session ${sessionId.slice(0, 8)}`;
   renderTimeline();
+  renderSessions(sessionsCatalog);
+}
+
+clearButton.addEventListener("click", () => {
+  startNewChat();
 });
 
 skillsToggle.addEventListener("click", () => {
@@ -804,4 +920,5 @@ renderActiveSkills([], []);
 renderSkillsCollapse();
 renderTimelineCollapse();
 loadSkillsCatalog();
+loadSessions();
 renderTimeline();

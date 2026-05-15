@@ -151,6 +151,14 @@ button {
   color: #2f3b41;
 }
 
+.session-pill {
+  display: none;
+}
+
+.fake-toggle {
+  display: none;
+}
+
 .primary-outline {
   padding: 0 16px;
   border-color: #70c8c3;
@@ -175,7 +183,7 @@ button {
 .workspace {
   height: calc(100vh - 72px);
   display: grid;
-  grid-template-columns: minmax(560px, 64%) minmax(420px, 36%);
+  grid-template-columns: 270px minmax(520px, 1fr) minmax(420px, 36%);
   background: var(--surface);
 }
 
@@ -194,10 +202,93 @@ button {
 }
 
 .chat-pane,
+.history-pane,
 .trace-pane,
 .trace-section {
   min-width: 0;
   min-height: 0;
+}
+
+.history-pane {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  background: #fbfcfc;
+}
+
+.session-list {
+  flex: 1;
+  overflow: auto;
+  padding: 14px 12px;
+}
+
+.session-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  gap: 6px;
+  align-items: start;
+  margin-bottom: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.session-item.active {
+  border-color: #83d2cd;
+  background: var(--accent-soft);
+}
+
+.session-main {
+  min-width: 0;
+  border: 0;
+  padding: 10px 0 10px 12px;
+  background: transparent;
+  text-align: left;
+}
+
+.session-title,
+.session-preview,
+.session-details {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-title {
+  color: var(--text);
+  font-weight: 760;
+}
+
+.session-preview {
+  margin-top: 4px;
+  color: #536268;
+  font-size: 12px;
+}
+
+.session-details {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.session-delete {
+  width: 26px;
+  height: 26px;
+  margin: 8px 8px 0 0;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.session-delete:hover {
+  border-color: #efc7c2;
+  background: #fff1f0;
+  color: var(--error);
 }
 
 .chat-pane {
@@ -1039,6 +1130,12 @@ button {
   .workspace {
     height: auto;
     grid-template-columns: 1fr;
+  }
+
+  .history-pane {
+    min-height: 260px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
   }
 
   .chat-pane {

@@ -8,9 +8,10 @@ from unittest.mock import patch
 
 from mini_hermes.agent import MiniAgent
 from mini_hermes.cli import build_parser, load_dotenv
+from mini_hermes.session_store import SessionStore
 from mini_hermes.skills import SkillLoader, parse_skill_markdown, slugify
 from mini_hermes.tools import build_default_registry
-from mini_hermes.web import TraceRun, get_session_agent, reset_session
+from mini_hermes.web import TraceRun, get_session_agent, reset_session, save_agent_session
 
 
 class MiniAgentTests(unittest.TestCase):
@@ -74,6 +75,21 @@ class MiniAgentTests(unittest.TestCase):
         self.assertEqual("ok\n", result.stdout)
         self.assertEqual(0, result.returncode)
 
+    def test_session_history_renders_and_restores_messages(self):
+        script = Path(__file__).parent / "tests" / "session_history_smoke.js"
+
+        result = subprocess.run(
+            ["node", str(script)],
+            check=False,
+            cwd=Path(__file__).parent,
+            text=True,
+            capture_output=True,
+        )
+
+        self.assertEqual("", result.stderr)
+        self.assertEqual("ok\n", result.stdout)
+        self.assertEqual(0, result.returncode)
+
     def test_trace_run_fills_missing_timing_from_event_gaps(self):
         trace = TraceRun()
 
@@ -88,6 +104,50 @@ class MiniAgentTests(unittest.TestCase):
         self.assertIn("offset_ms", first)
         self.assertGreaterEqual(second["duration_ms"], 1)
         self.assertGreaterEqual(second["offset_ms"], first["offset_ms"])
+
+    def test_session_store_persists_and_lists_recent_sessions(self):
+        with TemporaryDirectory() as tmpdir:
+            store = SessionStore(Path(tmpdir) / "sessions.json")
+            messages = [
+                {"role": "system", "content": "system"},
+                {"role": "user", "content": "第一轮问题"},
+                {"role": "assistant", "content": "第一轮回答"},
+            ]
+
+            saved = store.save_session(
+                "session-a",
+                messages=messages,
+                model="gpt-test",
+                fake=False,
+                usage={"input_tokens": 10, "output_tokens": 5, "total_tokens": 15},
+            )
+            reloaded = SessionStore(Path(tmpdir) / "sessions.json")
+            sessions = reloaded.list_sessions()
+            detail = reloaded.get_session("session-a")
+
+            self.assertEqual("session-a", saved["id"])
+            self.assertEqual("第一轮问题", saved["title"])
+            self.assertEqual("第一轮回答", saved["preview"])
+            self.assertEqual(2, saved["message_count"])
+            self.assertEqual(["session-a"], [session["id"] for session in sessions])
+            self.assertEqual(messages, detail["messages"])
+            self.assertEqual({"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}, detail["usage"])
+
+    def test_session_store_delete_removes_session(self):
+        with TemporaryDirectory() as tmpdir:
+            store = SessionStore(Path(tmpdir) / "sessions.json")
+            store.save_session(
+                "session-a",
+                messages=[{"role": "user", "content": "hello"}],
+                model="gpt-test",
+                fake=True,
+            )
+
+            deleted = store.delete_session("session-a")
+
+            self.assertTrue(deleted)
+            self.assertEqual([], store.list_sessions())
+            self.assertIsNone(store.get_session("session-a"))
 
     def test_fake_model_reads_file(self):
         agent = MiniAgent(fake=True)
@@ -599,6 +659,24 @@ class MiniAgentTests(unittest.TestCase):
         self.assertEqual("第二轮", same_agent.messages[-2]["content"])
 
         reset_session(session_id)
+
+    def test_web_session_restores_persisted_agent_history(self):
+        with TemporaryDirectory() as tmpdir:
+            store = SessionStore(Path(tmpdir) / "sessions.json")
+            session_id = "persisted-session"
+            original = MiniAgent(fake=True)
+            original.run_turn("第一轮")
+            save_agent_session(store, session_id, original, fake=True, usage=None)
+            reset_session(session_id)
+
+            restored = get_session_agent(session_id, fake=True, store=store)
+
+            self.assertEqual(
+                original.messages,
+                restored.messages,
+            )
+
+            reset_session(session_id)
 
 
 if __name__ == "__main__":

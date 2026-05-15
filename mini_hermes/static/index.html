@@ -19,7 +19,7 @@
         </nav>
       </div>
       <div class="topbar-actions">
-        <span id="sessionMeta" class="toolbar-pill">New session</span>
+        <span id="sessionMeta" class="toolbar-pill session-pill">New session</span>
         <span class="toolbar-pill">gpt-5.5</span>
         <span id="connection" class="connected">Connected</span>
         <button id="clearButton" class="primary-outline" type="button">New Chat</button>
@@ -27,11 +27,21 @@
     </header>
 
     <main id="chatView" class="workspace app-view active">
+      <aside class="history-pane" aria-label="Session History">
+        <div class="section-header compact">
+          <h1>History</h1>
+          <span id="sessionCount" class="meta">0 sessions</span>
+        </div>
+        <div id="sessionList" class="session-list empty-state">
+          Previous chats will appear here.
+        </div>
+      </aside>
+
       <section class="chat-pane" aria-label="Chat">
         <div class="section-header">
           <h1>Chat</h1>
           <div class="chat-tools">
-            <label class="mode-toggle">
+            <label class="mode-toggle fake-toggle">
               <input id="fakeMode" type="checkbox" />
               <span>Fake</span>
             </label>

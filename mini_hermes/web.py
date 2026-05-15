@@ -13,12 +13,14 @@ from urllib.parse import parse_qs, urlparse
 
 from .agent import MiniAgent
 from .cli import load_dotenv
+from .session_store import SessionStore
 from .skills import SkillLoader
 
 
 STATIC_DIR = Path(__file__).with_name("static")
 SESSIONS: dict[str, MiniAgent] = {}
 SESSIONS_LOCK = threading.Lock()
+SESSION_STORE = SessionStore()
 
 
 class TraceRun:
@@ -46,12 +48,16 @@ class TraceRun:
 def get_session_agent(
     session_id: str,
     fake: bool,
+    store: SessionStore | None = None,
 ) -> MiniAgent:
     key = f"{'fake' if fake else 'real'}:{session_id}"
     with SESSIONS_LOCK:
         agent = SESSIONS.get(key)
         if agent is None or agent.fake != fake:
             agent = MiniAgent(fake=fake)
+            saved = (store or SESSION_STORE).get_session(session_id)
+            if saved and saved.get("messages"):
+                agent.messages = saved["messages"]
             SESSIONS[key] = agent
         return agent
 
@@ -72,6 +78,23 @@ def latest_usage(events: list[dict[str, Any]]) -> dict[str, Any] | None:
         if usage:
             return usage
     return None
+
+
+def save_agent_session(
+    store: SessionStore,
+    session_id: str,
+    agent: MiniAgent,
+    *,
+    fake: bool,
+    usage: dict[str, Any] | None,
+) -> dict[str, Any]:
+    return store.save_session(
+        session_id,
+        messages=agent.messages,
+        model=agent.model,
+        fake=fake,
+        usage=usage,
+    )
 
 
 class MiniHermesWebHandler(BaseHTTPRequestHandler):
@@ -95,7 +118,19 @@ class MiniHermesWebHandler(BaseHTTPRequestHandler):
             self._stream_run()
             return
         if path == "/api/new-session":
-            self._send_json({"session_id": uuid.uuid4().hex})
+            session_id = uuid.uuid4().hex
+            self._send_json({"session_id": session_id, "session": None})
+            return
+        if path == "/api/sessions":
+            self._send_json({"sessions": SESSION_STORE.list_sessions(limit=100)})
+            return
+        if path.startswith("/api/sessions/"):
+            session_id = path.removeprefix("/api/sessions/").strip()
+            session = SESSION_STORE.get_session(session_id)
+            if session is None:
+                self._send_json({"ok": False, "error": f"session not found: {session_id}"}, status=404)
+                return
+            self._send_json({"ok": True, "session": session})
             return
         if path == "/api/skills":
             self._send_json({
@@ -131,6 +166,9 @@ class MiniHermesWebHandler(BaseHTTPRequestHandler):
         if path == "/api/skills/delete":
             self._delete_skill()
             return
+        if path.startswith("/api/sessions/"):
+            self._delete_session(path.removeprefix("/api/sessions/").strip())
+            return
         if path != "/api/run":
             self.send_error(404)
             return
@@ -149,6 +187,7 @@ class MiniHermesWebHandler(BaseHTTPRequestHandler):
             agent.stream_callback = None
             final = agent.run_turn(message)
             usage = latest_usage(trace.events)
+            session = save_agent_session(SESSION_STORE, session_id, agent, fake=fake, usage=usage)
         except Exception as exc:
             self._send_json(
                 {
@@ -165,6 +204,7 @@ class MiniHermesWebHandler(BaseHTTPRequestHandler):
             "final": final,
             "events": trace.events,
             "usage": usage,
+            "session": session,
             "model": agent.model,
             "fake": fake,
             "skills": [skill.summary() for skill in agent.active_skills],
@@ -217,6 +257,14 @@ class MiniHermesWebHandler(BaseHTTPRequestHandler):
             return
         self._send_json({"ok": True, "deleted_path": str(deleted_path)})
 
+    def _delete_session(self, session_id: str) -> None:
+        if not session_id:
+            self._send_json({"ok": False, "error": "session id is required"}, status=400)
+            return
+        deleted = SESSION_STORE.delete_session(session_id)
+        reset_session(session_id)
+        self._send_json({"ok": True, "deleted": deleted, "session_id": session_id})
+
     def log_message(self, format: str, *args: Any) -> None:
         return
 
@@ -254,11 +302,13 @@ class MiniHermesWebHandler(BaseHTTPRequestHandler):
                 agent.stream_callback = stream_callback
                 final = agent.run_turn(message)
                 usage = latest_usage(trace.events)
+                session = save_agent_session(SESSION_STORE, session_id, agent, fake=fake, usage=usage)
                 send("done", {
                     "ok": True,
                     "final": final,
                     "events": trace.events,
                     "usage": usage,
+                    "session": session,
                     "model": agent.model,
                     "fake": fake,
                     "skills": [skill.summary() for skill in agent.active_skills],

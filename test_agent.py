@@ -1,4 +1,6 @@
 import unittest
+import subprocess
+import time
 from pathlib import Path
 from types import SimpleNamespace
 from tempfile import TemporaryDirectory
@@ -8,10 +10,85 @@ from mini_hermes.agent import MiniAgent
 from mini_hermes.cli import build_parser, load_dotenv
 from mini_hermes.skills import SkillLoader, parse_skill_markdown, slugify
 from mini_hermes.tools import build_default_registry
-from mini_hermes.web import get_session_agent, reset_session
+from mini_hermes.web import TraceRun, get_session_agent, reset_session
 
 
 class MiniAgentTests(unittest.TestCase):
+    def test_chat_message_renders_assistant_markdown_only(self):
+        script = Path(__file__).parent / "tests" / "render_markdown_smoke.js"
+
+        result = subprocess.run(
+            ["node", str(script)],
+            check=False,
+            cwd=Path(__file__).parent,
+            text=True,
+            capture_output=True,
+        )
+
+        self.assertEqual("", result.stderr)
+        self.assertEqual("ok\n", result.stdout)
+        self.assertEqual(0, result.returncode)
+
+    def test_timeline_renders_duration_labels(self):
+        script = Path(__file__).parent / "tests" / "timeline_duration_smoke.js"
+
+        result = subprocess.run(
+            ["node", str(script)],
+            check=False,
+            cwd=Path(__file__).parent,
+            text=True,
+            capture_output=True,
+        )
+
+        self.assertEqual("", result.stderr)
+        self.assertEqual("ok\n", result.stdout)
+        self.assertEqual(0, result.returncode)
+
+    def test_message_usage_renders_token_counts_and_speed(self):
+        script = Path(__file__).parent / "tests" / "message_usage_smoke.js"
+
+        result = subprocess.run(
+            ["node", str(script)],
+            check=False,
+            cwd=Path(__file__).parent,
+            text=True,
+            capture_output=True,
+        )
+
+        self.assertEqual("", result.stderr)
+        self.assertEqual("ok\n", result.stdout)
+        self.assertEqual(0, result.returncode)
+
+    def test_answer_copy_button_copies_raw_assistant_content(self):
+        script = Path(__file__).parent / "tests" / "copy_answer_smoke.js"
+
+        result = subprocess.run(
+            ["node", str(script)],
+            check=False,
+            cwd=Path(__file__).parent,
+            text=True,
+            capture_output=True,
+        )
+
+        self.assertEqual("", result.stderr)
+        self.assertEqual("ok\n", result.stdout)
+        self.assertEqual(0, result.returncode)
+
+    def test_trace_run_fills_missing_timing_from_event_gaps(self):
+        trace = TraceRun()
+
+        trace.append({"type": "user_message", "data": {}})
+        time.sleep(0.01)
+        trace.append({"type": "model_response", "data": {}})
+
+        first, second = trace.events
+        self.assertEqual(1, first["step"])
+        self.assertEqual(2, second["step"])
+        self.assertIn("duration_ms", first)
+        self.assertIn("offset_ms", first)
+        self.assertGreaterEqual(second["duration_ms"], 1)
+        self.assertGreaterEqual(second["offset_ms"], first["offset_ms"])
+
     def test_fake_model_reads_file(self):
         agent = MiniAgent(fake=True)
 
@@ -50,6 +127,86 @@ class MiniAgentTests(unittest.TestCase):
         self.assertIn("tool_result", event_types)
         self.assertIn("final_response", event_types)
         self.assertIn("工具结果", result)
+
+    def test_trace_events_include_step_timings(self):
+        class SlowFinalClient:
+            def create(self, **kwargs):
+                time.sleep(0.01)
+                message = SimpleNamespace(content="timed response", tool_calls=[])
+                return SimpleNamespace(choices=[SimpleNamespace(message=message)])
+
+        events = []
+        agent = MiniAgent(fake=True, trace_callback=events.append)
+        agent.client = SlowFinalClient()
+
+        agent.run("只回答")
+
+        model_event = next(event for event in events if event["type"] == "model_response")
+        self.assertIn("started_at", model_event)
+        self.assertIn("ended_at", model_event)
+        self.assertIn("duration_ms", model_event)
+        self.assertIn("offset_ms", model_event)
+        self.assertGreaterEqual(model_event["duration_ms"], 1)
+        self.assertGreaterEqual(model_event["ended_at"], model_event["started_at"])
+        self.assertGreaterEqual(model_event["offset_ms"], 0)
+
+    def test_final_response_includes_api_usage_and_token_speed(self):
+        class SlowUsageClient:
+            def create(self, **kwargs):
+                time.sleep(0.02)
+                message = SimpleNamespace(content="usage response", tool_calls=[])
+                usage = SimpleNamespace(prompt_tokens=11, completion_tokens=7, total_tokens=18)
+                return SimpleNamespace(choices=[SimpleNamespace(message=message)], usage=usage)
+
+        events = []
+        agent = MiniAgent(fake=True, trace_callback=events.append)
+        agent.client = SlowUsageClient()
+
+        result = agent.run("只回答")
+
+        self.assertEqual("usage response", result)
+        model_event = next(event for event in events if event["type"] == "model_response")
+        final_event = next(event for event in events if event["type"] == "final_response")
+        usage = final_event["data"]["usage"]
+        self.assertEqual({
+            "input_tokens": 11,
+            "output_tokens": 7,
+            "total_tokens": 18,
+            "source": "api",
+        }, {
+            "input_tokens": usage["input_tokens"],
+            "output_tokens": usage["output_tokens"],
+            "total_tokens": usage["total_tokens"],
+            "source": usage["source"],
+        })
+        self.assertGreater(usage["tokens_per_second"], 0)
+        self.assertEqual(usage, model_event["data"]["usage"])
+
+    def test_tool_result_trace_includes_dispatch_duration(self):
+        class SlowRegistry:
+            def schemas(self):
+                return []
+
+            def names(self):
+                return {"slow_tool"}
+
+            def dispatch(self, name, arguments):
+                time.sleep(0.01)
+                return "slow result"
+
+        tool_call = SimpleNamespace(
+            id="call_1",
+            function=SimpleNamespace(name="slow_tool", arguments="{}"),
+        )
+        events = []
+        agent = MiniAgent(fake=True, registry=SlowRegistry(), trace_callback=events.append)
+
+        result = agent._execute_tool_call(tool_call)
+
+        tool_result = next(event for event in events if event["type"] == "tool_result")
+        self.assertEqual("slow result", result["content"])
+        self.assertGreaterEqual(tool_result["duration_ms"], 1)
+        self.assertGreaterEqual(tool_result["ended_at"], tool_result["started_at"])
 
     def test_trace_event_payloads_are_snapshots(self):
         events = []
@@ -281,9 +438,11 @@ class MiniAgentTests(unittest.TestCase):
         class StreamingClient:
             def __init__(self):
                 self.stream_requested = False
+                self.stream_options = None
 
             def create(self, **kwargs):
                 self.stream_requested = kwargs.get("stream") is True
+                self.stream_options = kwargs.get("stream_options")
                 if self.stream_requested:
                     return iter([
                         SimpleNamespace(
@@ -297,20 +456,77 @@ class MiniAgentTests(unittest.TestCase):
                                 finish_reason="stop",
                                 delta=SimpleNamespace(content="，世界", tool_calls=[]),
                             )],
+                            usage=SimpleNamespace(
+                                prompt_tokens=7,
+                                completion_tokens=2,
+                                total_tokens=9,
+                            ),
                         ),
                     ])
                 message = SimpleNamespace(content="not streamed", tool_calls=[])
                 return SimpleNamespace(choices=[SimpleNamespace(message=message)])
 
         deltas = []
-        agent = MiniAgent(fake=False, api_key="test-key", stream_callback=deltas.append)
+        events = []
+        agent = MiniAgent(
+            fake=False,
+            api_key="test-key",
+            trace_callback=events.append,
+            stream_callback=deltas.append,
+        )
         agent.client = StreamingClient()
 
         result = agent.run("你好")
 
         self.assertTrue(agent.client.stream_requested)
+        self.assertEqual({"include_usage": True}, agent.client.stream_options)
         self.assertEqual(["你好", "，世界"], deltas)
         self.assertEqual("你好，世界", result)
+        final_event = next(event for event in events if event["type"] == "final_response")
+        self.assertEqual(7, final_event["data"]["usage"]["input_tokens"])
+        self.assertEqual(2, final_event["data"]["usage"]["output_tokens"])
+        self.assertEqual(9, final_event["data"]["usage"]["total_tokens"])
+        self.assertEqual("api", final_event["data"]["usage"]["source"])
+
+    def test_streaming_usage_chunk_can_arrive_without_choices(self):
+        class UsageOnlyFinalChunkClient:
+            def create(self, **kwargs):
+                if kwargs.get("stream") is True:
+                    return iter([
+                        SimpleNamespace(
+                            choices=[SimpleNamespace(
+                                finish_reason="stop",
+                                delta=SimpleNamespace(content="done", tool_calls=[]),
+                            )],
+                        ),
+                        SimpleNamespace(
+                            choices=[],
+                            usage=SimpleNamespace(
+                                prompt_tokens=5,
+                                completion_tokens=1,
+                                total_tokens=6,
+                            ),
+                        ),
+                    ])
+                message = SimpleNamespace(content="not streamed", tool_calls=[])
+                return SimpleNamespace(choices=[SimpleNamespace(message=message)])
+
+        events = []
+        agent = MiniAgent(
+            fake=False,
+            api_key="test-key",
+            trace_callback=events.append,
+            stream_callback=lambda delta: None,
+        )
+        agent.client = UsageOnlyFinalChunkClient()
+
+        result = agent.run("go")
+
+        self.assertEqual("done", result)
+        final_event = next(event for event in events if event["type"] == "final_response")
+        self.assertEqual(5, final_event["data"]["usage"]["input_tokens"])
+        self.assertEqual(1, final_event["data"]["usage"]["output_tokens"])
+        self.assertEqual(6, final_event["data"]["usage"]["total_tokens"])
 
     def test_streaming_failure_falls_back_to_non_streaming_response(self):
         class FailingStreamClient:

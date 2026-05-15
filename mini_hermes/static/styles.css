@@ -382,9 +382,125 @@ button {
   padding: 14px 16px;
   background: var(--surface);
   line-height: 1.6;
-  white-space: pre-wrap;
   overflow-wrap: anywhere;
   box-shadow: 0 1px 2px rgba(23, 38, 44, 0.04);
+}
+
+.message-text > :first-child {
+  margin-top: 0;
+}
+
+.message-text > :last-child {
+  margin-bottom: 0;
+}
+
+.message-text p {
+  margin: 0 0 10px;
+  white-space: pre-wrap;
+}
+
+.message-text h1,
+.message-text h2,
+.message-text h3,
+.message-text h4,
+.message-text h5,
+.message-text h6 {
+  margin: 0 0 8px;
+  font-weight: 760;
+  line-height: 1.35;
+}
+
+.message-text h1 {
+  font-size: 18px;
+}
+
+.message-text h2 {
+  font-size: 16px;
+}
+
+.message-text h3,
+.message-text h4,
+.message-text h5,
+.message-text h6 {
+  font-size: 14px;
+}
+
+.message-text ul {
+  margin: 6px 0 10px;
+  padding-left: 20px;
+}
+
+.message-text li + li {
+  margin-top: 4px;
+}
+
+.message-text code {
+  padding: 2px 5px;
+  border: 1px solid #d6e1e1;
+  border-radius: 6px;
+  background: #f3f7f7;
+  color: #0d5f5c;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 0.92em;
+}
+
+.message-text pre {
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 8px 0 10px;
+  padding: 10px 12px;
+  border: 1px solid #d6e1e1;
+  border-radius: 8px;
+  background: #f3f7f7;
+}
+
+.message-text pre code {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  white-space: pre;
+}
+
+.message-footer {
+  width: fit-content;
+  max-width: 100%;
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.message-usage {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.message-usage[hidden] {
+  display: none;
+}
+
+.message-copy {
+  min-height: 26px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 0 9px;
+  background: var(--surface);
+  color: var(--accent-dark);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.message-copy:hover {
+  border-color: #83d2cd;
+  background: var(--accent-soft);
+}
+
+.message-copy[hidden] {
+  display: none;
 }
 
 .tool-card {
@@ -876,6 +992,32 @@ button {
   line-height: 1;
   background: #eef1f1;
   color: var(--muted);
+}
+
+.step-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.time-chip {
+  min-width: 72px;
+  display: inline-grid;
+  grid-template-columns: auto auto;
+  align-items: baseline;
+  justify-content: end;
+  gap: 4px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+
+.time-label {
+  color: #8a969b;
+}
+
+.time-value {
+  color: #536268;
 }
 
 .status.success {

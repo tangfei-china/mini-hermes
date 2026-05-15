@@ -4,6 +4,7 @@ import json
 import os
 import queue
 import threading
+import time
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -23,8 +24,19 @@ SESSIONS_LOCK = threading.Lock()
 class TraceRun:
     def __init__(self) -> None:
         self.events: list[dict[str, Any]] = []
+        self.started_perf = time.perf_counter()
+        self.started_wall_ms = time.time() * 1000
 
     def append(self, event: dict[str, Any]) -> None:
+        event = dict(event)
+        now_perf = time.perf_counter()
+        now_offset_ms = round(max(0.0, (now_perf - self.started_perf) * 1000))
+        if not all(key in event for key in ("started_at", "ended_at", "duration_ms", "offset_ms")):
+            previous_offset = self.events[-1]["offset_ms"] if self.events else now_offset_ms
+            event.setdefault("offset_ms", now_offset_ms)
+            event.setdefault("duration_ms", max(0, now_offset_ms - previous_offset))
+            event.setdefault("started_at", round(self.started_wall_ms + event["offset_ms"]))
+            event.setdefault("ended_at", round(event["started_at"] + event["duration_ms"]))
         self.events.append({
             "step": len(self.events) + 1,
             **event,
@@ -52,6 +64,14 @@ def reset_session(session_id: str) -> None:
             for key in list(SESSIONS):
                 if key.startswith(session_prefix):
                     SESSIONS.pop(key, None)
+
+
+def latest_usage(events: list[dict[str, Any]]) -> dict[str, Any] | None:
+    for event in reversed(events):
+        usage = event.get("data", {}).get("usage")
+        if usage:
+            return usage
+    return None
 
 
 class MiniHermesWebHandler(BaseHTTPRequestHandler):
@@ -128,6 +148,7 @@ class MiniHermesWebHandler(BaseHTTPRequestHandler):
             agent.trace_callback = trace.append
             agent.stream_callback = None
             final = agent.run_turn(message)
+            usage = latest_usage(trace.events)
         except Exception as exc:
             self._send_json(
                 {
@@ -143,6 +164,7 @@ class MiniHermesWebHandler(BaseHTTPRequestHandler):
             "ok": True,
             "final": final,
             "events": trace.events,
+            "usage": usage,
             "model": agent.model,
             "fake": fake,
             "skills": [skill.summary() for skill in agent.active_skills],
@@ -231,10 +253,12 @@ class MiniHermesWebHandler(BaseHTTPRequestHandler):
                 agent.trace_callback = trace_callback
                 agent.stream_callback = stream_callback
                 final = agent.run_turn(message)
+                usage = latest_usage(trace.events)
                 send("done", {
                     "ok": True,
                     "final": final,
                     "events": trace.events,
+                    "usage": usage,
                     "model": agent.model,
                     "fake": fake,
                     "skills": [skill.summary() for skill in agent.active_skills],

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from typing import Any, Callable
 
 from .fake_model import FakeModel
@@ -37,6 +38,8 @@ class MiniAgent:
         self.active_skills: list[Skill] = []
         self.catalog_prompt = build_skill_catalog_prompt(self.skill_loader.list_skills())
         self.messages: list[dict[str, Any]] = self._initial_messages()
+        self._trace_run_started_perf = 0.0
+        self._trace_run_started_wall_ms = 0.0
 
         if fake:
             self.client = FakeModel()
@@ -56,16 +59,33 @@ class MiniAgent:
         self.messages = self._initial_messages()
 
     def run_turn(self, user_message: str) -> str:
+        self._start_trace_run()
         self.messages.append({"role": "user", "content": user_message})
         empty_response_retries = 0
         self._emit_skills_trace()
         self._emit_trace("user_message", {"content": user_message, "messages": self.messages})
 
         for iteration in range(1, self.max_iterations + 1):
+            build_started = time.perf_counter()
             api_kwargs = self._build_api_kwargs(self.messages)
-            self._emit_trace("build_api_kwargs", {"iteration": iteration, "api_kwargs": api_kwargs})
+            self._emit_trace(
+                "build_api_kwargs",
+                {"iteration": iteration, "api_kwargs": api_kwargs},
+                started_perf=build_started,
+                ended_perf=time.perf_counter(),
+            )
+            model_started = time.perf_counter()
             response = self._call_model(api_kwargs)
+            model_ended = time.perf_counter()
             assistant_message = response.choices[0].message
+            model_duration_ms = round(max(0.0, (model_ended - model_started) * 1000))
+            message_content = assistant_message.content or ""
+            usage = self._usage_summary(
+                getattr(response, "usage", None),
+                messages=api_kwargs["messages"],
+                output_text=message_content,
+                duration_ms=model_duration_ms,
+            )
             self._emit_trace(
                 "model_response",
                 {
@@ -73,7 +93,10 @@ class MiniAgent:
                     "message": self._assistant_to_dict(assistant_message)
                     if getattr(assistant_message, "tool_calls", None)
                     else {"role": "assistant", "content": assistant_message.content or ""},
+                    "usage": usage,
                 },
+                started_perf=model_started,
+                ended_perf=model_ended,
             )
 
             if getattr(assistant_message, "tool_calls", None):
@@ -114,13 +137,25 @@ class MiniAgent:
 
             self.messages.append({"role": "assistant", "content": final})
             self._emit_stream_text(final)
-            self._emit_trace("final_response", {"content": final, "messages": self.messages})
+            self._emit_trace(
+                "final_response",
+                {"content": final, "messages": self.messages, "usage": usage},
+            )
             return final
 
         final = "Reached max_iterations before a final answer."
+        usage = self._usage_summary(
+            None,
+            messages=self.messages,
+            output_text=final,
+            duration_ms=None,
+        )
         self._emit_stream_text(final)
         self.messages.append({"role": "assistant", "content": final})
-        self._emit_trace("final_response", {"content": final, "messages": self.messages})
+        self._emit_trace(
+            "final_response",
+            {"content": final, "messages": self.messages, "usage": usage},
+        )
         return final
 
     def _system_message(self) -> dict[str, Any]:
@@ -196,12 +231,22 @@ class MiniAgent:
     def _call_model_streaming(self, api_kwargs: dict[str, Any]):
         from types import SimpleNamespace
 
-        stream = self.client.create(**api_kwargs, stream=True)
+        stream = self.client.create(
+            **api_kwargs,
+            stream=True,
+            stream_options={"include_usage": True},
+        )
         content_parts: list[str] = []
         tool_calls: dict[int, dict[str, Any]] = {}
         finish_reason = None
+        usage = None
 
         for chunk in stream:
+            chunk_usage = getattr(chunk, "usage", None)
+            if chunk_usage is not None:
+                usage = chunk_usage
+            if not getattr(chunk, "choices", None):
+                continue
             choice = chunk.choices[0]
             finish_reason = choice.finish_reason or finish_reason
             delta = choice.delta
@@ -243,8 +288,85 @@ class MiniAgent:
             tool_calls=calls,
         )
         return SimpleNamespace(
-            choices=[SimpleNamespace(message=message, finish_reason=finish_reason)]
+            choices=[SimpleNamespace(message=message, finish_reason=finish_reason)],
+            usage=usage,
         )
+
+    def _usage_summary(
+        self,
+        usage: Any,
+        *,
+        messages: list[dict[str, Any]],
+        output_text: str,
+        duration_ms: int | None,
+    ) -> dict[str, Any]:
+        input_tokens = self._read_usage_int(
+            usage,
+            "input_tokens",
+            "prompt_tokens",
+            "prompt_token_count",
+        )
+        output_tokens = self._read_usage_int(
+            usage,
+            "output_tokens",
+            "completion_tokens",
+            "completion_token_count",
+        )
+        total_tokens = self._read_usage_int(usage, "total_tokens", "total_token_count")
+        source = "api" if any(value is not None for value in (input_tokens, output_tokens, total_tokens)) else "estimated"
+
+        if input_tokens is None:
+            input_tokens = self._estimate_messages_tokens(messages)
+        if output_tokens is None:
+            output_tokens = self._estimate_text_tokens(output_text)
+        if total_tokens is None:
+            total_tokens = input_tokens + output_tokens
+
+        summary: dict[str, Any] = {
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "total_tokens": total_tokens,
+            "source": source,
+        }
+        if duration_ms and duration_ms > 0 and output_tokens > 0:
+            summary["tokens_per_second"] = round(output_tokens / (duration_ms / 1000), 1)
+        return summary
+
+    def _read_usage_int(self, usage: Any, *names: str) -> int | None:
+        if usage is None:
+            return None
+        for name in names:
+            value = usage.get(name) if isinstance(usage, dict) else getattr(usage, name, None)
+            if value is None:
+                continue
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                continue
+        return None
+
+    def _estimate_messages_tokens(self, messages: list[dict[str, Any]]) -> int:
+        total = 0
+        for message in messages:
+            total += self._estimate_text_tokens(str(message.get("content") or ""))
+            for tool_call in message.get("tool_calls") or []:
+                total += self._estimate_text_tokens(json.dumps(tool_call, ensure_ascii=False))
+        return total
+
+    def _estimate_text_tokens(self, text: str) -> int:
+        stripped = str(text or "").strip()
+        if not stripped:
+            return 0
+        ascii_count = 0
+        non_ascii_count = 0
+        for char in stripped:
+            if char.isspace():
+                ascii_count += 1
+            elif ord(char) < 128:
+                ascii_count += 1
+            else:
+                non_ascii_count += 1
+        return max(1, round((ascii_count / 4) + non_ascii_count))
 
     def _assistant_to_dict(self, assistant_message: Any) -> dict[str, Any]:
         return {
@@ -274,6 +396,7 @@ class MiniAgent:
                 "arguments": raw_args,
             },
         )
+        tool_started = time.perf_counter()
         try:
             arguments = json.loads(raw_args)
         except json.JSONDecodeError as exc:
@@ -290,16 +413,53 @@ class MiniAgent:
             "name": name,
             "content": result,
         }
-        self._emit_trace("tool_result", tool_message)
+        self._emit_trace(
+            "tool_result",
+            tool_message,
+            started_perf=tool_started,
+            ended_perf=time.perf_counter(),
+        )
         self._handle_loaded_skill_tool(name, result)
         return tool_message
 
-    def _emit_trace(self, event_type: str, data: dict[str, Any]) -> None:
+    def _start_trace_run(self) -> None:
+        self._trace_run_started_perf = time.perf_counter()
+        self._trace_run_started_wall_ms = time.time() * 1000
+
+    def _trace_timing(
+        self,
+        started_perf: float | None = None,
+        ended_perf: float | None = None,
+    ) -> dict[str, int]:
+        if not self._trace_run_started_perf:
+            self._start_trace_run()
+        if started_perf is None:
+            started_perf = time.perf_counter()
+        if ended_perf is None:
+            ended_perf = started_perf
+        started_delta_ms = max(0.0, (started_perf - self._trace_run_started_perf) * 1000)
+        ended_delta_ms = max(started_delta_ms, (ended_perf - self._trace_run_started_perf) * 1000)
+        return {
+            "started_at": round(self._trace_run_started_wall_ms + started_delta_ms),
+            "ended_at": round(self._trace_run_started_wall_ms + ended_delta_ms),
+            "duration_ms": round(max(0.0, (ended_perf - started_perf) * 1000)),
+            "offset_ms": round(started_delta_ms),
+        }
+
+    def _emit_trace(
+        self,
+        event_type: str,
+        data: dict[str, Any],
+        *,
+        started_perf: float | None = None,
+        ended_perf: float | None = None,
+    ) -> None:
         if self.trace_callback is None:
             return
         snapshot = json.loads(json.dumps(data, ensure_ascii=False))
         self.trace_callback({
             "type": event_type,
+            **self._trace_timing(started_perf, ended_perf),
             "data": snapshot,
         })
 

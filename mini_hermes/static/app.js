@@ -70,6 +70,212 @@ function statusFor(event) {
   return "success";
 }
 
+function formatDuration(ms) {
+  if (ms === undefined || ms === null || ms === "") return "—";
+  const value = Number(ms);
+  if (!Number.isFinite(value)) return "—";
+  if (value < 1000) return `${Math.max(0, Math.round(value))}ms`;
+  const seconds = value / 1000;
+  if (seconds < 10) return `${seconds.toFixed(1)}s`;
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = Math.round(seconds % 60);
+  return `${minutes}m ${remainingSeconds}s`;
+}
+
+function formatOffset(ms) {
+  if (ms === undefined || ms === null || ms === "") return "—";
+  return `+${formatDuration(ms)}`;
+}
+
+function escapeHtml(text) {
+  return String(text || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function renderInlineMarkdown(text) {
+  const codePlaceholders = [];
+  let html = escapeHtml(text).replace(/`([^`]+)`/g, (_match, code) => {
+    const token = `\u0000CODE${codePlaceholders.length}\u0000`;
+    codePlaceholders.push(`<code>${code}</code>`);
+    return token;
+  });
+  html = html
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*([^*]+)\*/g, "<em>$1</em>");
+  codePlaceholders.forEach((codeHtml, index) => {
+    html = html.replace(`\u0000CODE${index}\u0000`, codeHtml);
+  });
+  return html;
+}
+
+function renderMarkdown(markdown) {
+  const lines = String(markdown || "").split(/\r?\n/);
+  const html = [];
+  let paragraph = [];
+  let inList = false;
+  let inCodeBlock = false;
+  let codeLines = [];
+
+  const closeParagraph = () => {
+    if (!paragraph.length) return;
+    html.push(`<p>${renderInlineMarkdown(paragraph.join(" "))}</p>`);
+    paragraph = [];
+  };
+  const closeList = () => {
+    if (!inList) return;
+    html.push("</ul>");
+    inList = false;
+  };
+  const closeCodeBlock = () => {
+    html.push(`<pre><code>${escapeHtml(codeLines.join("\n"))}</code></pre>`);
+    codeLines = [];
+    inCodeBlock = false;
+  };
+
+  for (const line of lines) {
+    if (/^```/.test(line.trim())) {
+      if (inCodeBlock) {
+        closeCodeBlock();
+      } else {
+        closeParagraph();
+        closeList();
+        inCodeBlock = true;
+        codeLines = [];
+      }
+      continue;
+    }
+
+    if (inCodeBlock) {
+      codeLines.push(line);
+      continue;
+    }
+
+    const listMatch = line.match(/^\s*[-*]\s+(.+)$/);
+    if (listMatch) {
+      closeParagraph();
+      if (!inList) {
+        html.push("<ul>");
+        inList = true;
+      }
+      html.push(`<li>${renderInlineMarkdown(listMatch[1])}</li>`);
+      continue;
+    }
+
+    if (!line.trim()) {
+      closeParagraph();
+      closeList();
+      continue;
+    }
+
+    const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
+    if (headingMatch) {
+      closeParagraph();
+      closeList();
+      const level = headingMatch[1].length;
+      html.push(`<h${level}>${renderInlineMarkdown(headingMatch[2])}</h${level}>`);
+      continue;
+    }
+
+    closeList();
+    paragraph.push(line.trim());
+  }
+
+  if (inCodeBlock) closeCodeBlock();
+  closeParagraph();
+  closeList();
+  return html.join("");
+}
+
+function setMessageText(element, text, markdown = false) {
+  element.__rawText = String(text || "");
+  if (markdown) {
+    element.innerHTML = renderMarkdown(element.__rawText);
+    return;
+  }
+  element.textContent = element.__rawText;
+}
+
+function appendMessageText(element, text, markdown = false) {
+  setMessageText(element, `${element.__rawText || ""}${text || ""}`, markdown);
+}
+
+function formatNumber(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "—";
+  return new Intl.NumberFormat("en-US").format(number);
+}
+
+function formatTokenSpeed(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) return "";
+  return `${number.toFixed(1)} tokens/s`;
+}
+
+function formatUsage(usage) {
+  if (!usage) return "";
+  const parts = [
+    `input ${formatNumber(usage.input_tokens)}`,
+    `output ${formatNumber(usage.output_tokens)}`,
+    `total ${formatNumber(usage.total_tokens)}`,
+  ];
+  const speed = formatTokenSpeed(usage.tokens_per_second);
+  if (speed) parts.push(speed);
+  if (usage.source === "estimated") parts.push("estimated");
+  return parts.join(" · ");
+}
+
+function setMessageUsage(messageElement, usage) {
+  const usageElement = messageElement.querySelector(".message-usage");
+  if (!usageElement) return;
+  const text = formatUsage(usage);
+  usageElement.textContent = text;
+  usageElement.hidden = !text;
+}
+
+async function copyText(text) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const area = document.createElement("textarea");
+  area.value = text;
+  area.setAttribute("readonly", "readonly");
+  area.style.position = "fixed";
+  area.style.opacity = "0";
+  document.body.appendChild(area);
+  area.select();
+  document.execCommand("copy");
+  area.remove();
+}
+
+function setCopyButton(messageElement, text) {
+  const button = messageElement.querySelector(".message-copy");
+  if (!button) return;
+  const rawText = String(text || "");
+  button.hidden = !rawText;
+  button.textContent = "Copy";
+  button.onclick = async () => {
+    if (!rawText) return;
+    try {
+      await copyText(rawText);
+      button.textContent = "Copied";
+      setTimeout(() => {
+        button.textContent = "Copy";
+      }, 1200);
+    } catch (error) {
+      button.textContent = "Copy failed";
+      setTimeout(() => {
+        button.textContent = "Copy";
+      }, 1600);
+    }
+  };
+}
+
 function messageBubble(role, text, tone = "") {
   const item = document.createElement("article");
   const normalizedRole = role.toLowerCase();
@@ -79,9 +285,16 @@ function messageBubble(role, text, tone = "") {
     <div class="message-body">
       <div class="message-role">${role}</div>
       <div class="message-text"></div>
+      <div class="message-footer">
+        <div class="message-usage" hidden></div>
+        <button class="message-copy" type="button" hidden>Copy</button>
+      </div>
     </div>
   `;
-  item.querySelector(".message-text").textContent = text;
+  setMessageText(item.querySelector(".message-text"), text, normalizedRole === "assistant" && tone !== "error");
+  if (normalizedRole === "assistant" && text && tone !== "error") {
+    setCopyButton(item, text);
+  }
   return item;
 }
 
@@ -161,7 +374,17 @@ function renderTimeline() {
           <span class="step-title">${labelFor(event.type)}</span>
           <span class="step-subtitle">${subtitleFor(event)}</span>
         </span>
-        <span class="status ${statusFor(event)}">${statusFor(event)}</span>
+        <span class="step-meta">
+          <span class="time-chip offset-time" title="Step start time since this run began">
+            <span class="time-label">start</span>
+            <span class="time-value">${formatOffset(event.offset_ms)}</span>
+          </span>
+          <span class="time-chip duration" title="Time spent inside this step">
+            <span class="time-label">took</span>
+            <span class="time-value">${formatDuration(event.duration_ms)}</span>
+          </span>
+          <span class="status ${statusFor(event)}">${statusFor(event)}</span>
+        </span>
       </button>
     `;
     item.querySelector(".timeline-row").addEventListener("click", () => selectStep(event.step));
@@ -452,13 +675,15 @@ async function runAgent(message, fake) {
 
   source.addEventListener("delta", (event) => {
     const payload = JSON.parse(event.data);
-    assistantText.textContent += payload.text || "";
+    appendMessageText(assistantText, payload.text || "", true);
     conversation.scrollTop = conversation.scrollHeight;
   });
 
   source.addEventListener("done", (event) => {
     const payload = JSON.parse(event.data);
-    assistantText.textContent = payload.final || "(model returned an empty final response)";
+    setMessageText(assistantText, payload.final || "(model returned an empty final response)", true);
+    setCopyButton(assistantBubble, payload.final || "");
+    setMessageUsage(assistantBubble, payload.usage);
     if (payload.events?.length) {
       events = payload.events;
       renderTimeline();
@@ -476,7 +701,7 @@ async function runAgent(message, fake) {
     if (event.data) {
       const payload = JSON.parse(event.data);
       assistantBubble.classList.add("error");
-      assistantText.textContent = cleanError(payload.error || "Stream failed");
+      setMessageText(assistantText, cleanError(payload.error || "Stream failed"));
     }
     runMeta.textContent = "Failed";
     source.close();

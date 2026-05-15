@@ -79,7 +79,11 @@ const stylesCss = fs.readFileSync(path.join(__dirname, "..", "mini_hermes", "sta
 assert.match(indexHtml, /id="sessionMeta" class="toolbar-pill session-pill"/);
 assert.match(indexHtml, /class="mode-toggle fake-toggle"/);
 assert.match(stylesCss, /\.session-pill\s*{\s*display:\s*none;\s*}/);
-assert.match(stylesCss, /\.fake-toggle\s*{\s*display:\s*none;\s*}/);
+const modeToggleIndex = stylesCss.indexOf(".mode-toggle {");
+const fakeToggleIndex = stylesCss.indexOf(".mode-toggle.fake-toggle");
+assert.ok(modeToggleIndex >= 0);
+assert.ok(fakeToggleIndex > modeToggleIndex);
+assert.match(stylesCss, /\.mode-toggle\.fake-toggle\s*{\s*display:\s*none;\s*}/);
 
 const context = {
   console,

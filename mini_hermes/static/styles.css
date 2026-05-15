@@ -155,10 +155,6 @@ button {
   display: none;
 }
 
-.fake-toggle {
-  display: none;
-}
-
 .primary-outline {
   padding: 0 16px;
   border-color: #70c8c3;
@@ -379,6 +375,10 @@ button {
   align-items: center;
   gap: 8px;
   color: var(--muted);
+}
+
+.mode-toggle.fake-toggle {
+  display: none;
 }
 
 .skills-control {

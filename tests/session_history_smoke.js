@@ -76,9 +76,18 @@ const appJs = fs.readFileSync(path.join(__dirname, "..", "mini_hermes", "static"
 const indexHtml = fs.readFileSync(path.join(__dirname, "..", "mini_hermes", "static", "index.html"), "utf8");
 const stylesCss = fs.readFileSync(path.join(__dirname, "..", "mini_hermes", "static", "styles.css"), "utf8");
 
+const topbarActions = indexHtml.match(/<div class="topbar-actions">([\s\S]*?)<\/div>/)?.[1] || "";
+const historyPane = indexHtml.match(/<aside class="history-pane"[\s\S]*?<\/aside>/)?.[0] || "";
+assert.doesNotMatch(topbarActions, /id="clearButton"/);
+assert.match(topbarActions, /class="model-pill"/);
+assert.match(historyPane, /id="clearButton" class="history-new-chat icon-button"[^>]*aria-label="New Chat"[^>]*title="New Chat"[^>]*>[\s\S]*<svg/);
+assert.match(indexHtml, /class="toggle-icon"[\s\S]*<svg/);
 assert.match(indexHtml, /id="sessionMeta" class="toolbar-pill session-pill"/);
 assert.match(indexHtml, /class="mode-toggle fake-toggle"/);
 assert.match(stylesCss, /\.session-pill\s*{\s*display:\s*none;\s*}/);
+assert.match(stylesCss, /\.icon-button/);
+assert.match(stylesCss, /\.model-pill/);
+assert.match(stylesCss, /\.history-new-chat/);
 const modeToggleIndex = stylesCss.indexOf(".mode-toggle {");
 const fakeToggleIndex = stylesCss.indexOf(".mode-toggle.fake-toggle");
 assert.ok(modeToggleIndex >= 0);

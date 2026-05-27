@@ -94,6 +94,8 @@ context.setMessageUsage(assistantBubble, {
   output_tokens: 45,
   total_tokens: 168,
   tokens_per_second: 12.34,
+  context_window: 1000,
+  context_percent: 16.8,
   source: "api",
 });
 const usage = assistantBubble.querySelector(".message-usage");
@@ -101,6 +103,8 @@ const usage = assistantBubble.querySelector(".message-usage");
 assert.match(usage.textContent, /input 123/);
 assert.match(usage.textContent, /output 45/);
 assert.match(usage.textContent, /total 168/);
+assert.match(usage.textContent, /context 168 \/ 1,000/);
+assert.match(usage.textContent, /16\.8%/);
 assert.match(usage.textContent, /12\.3 tokens\/s/);
 assert.doesNotMatch(usage.textContent, /estimated/);
 

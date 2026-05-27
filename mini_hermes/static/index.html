@@ -20,9 +20,16 @@
       </div>
       <div class="topbar-actions">
         <span id="sessionMeta" class="toolbar-pill session-pill">New session</span>
-        <span class="toolbar-pill">gpt-5.5</span>
+        <span class="model-pill" aria-label="Current model gpt-5.5">
+          <span class="model-icon" aria-hidden="true">
+            <svg viewBox="0 0 20 20" focusable="false">
+              <rect x="5" y="5" width="10" height="10" rx="3"></rect>
+              <path d="M7.5 2.5v3M12.5 2.5v3M7.5 14.5v3M12.5 14.5v3M2.5 7.5h3M2.5 12.5h3M14.5 7.5h3M14.5 12.5h3"></path>
+            </svg>
+          </span>
+          <span>gpt-5.5</span>
+        </span>
         <span id="connection" class="connected">Connected</span>
-        <button id="clearButton" class="primary-outline" type="button">New Chat</button>
       </div>
     </header>
 
@@ -30,7 +37,14 @@
       <aside class="history-pane" aria-label="Session History">
         <div class="section-header compact">
           <h1>History</h1>
-          <span id="sessionCount" class="meta">0 sessions</span>
+          <div class="history-actions">
+            <span id="sessionCount" class="meta">0 sessions</span>
+            <button id="clearButton" class="history-new-chat icon-button" type="button" aria-label="New Chat" title="New Chat">
+              <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                <path d="M10 4.5v11M4.5 10h11"></path>
+              </svg>
+            </button>
+          </div>
         </div>
         <div id="sessionList" class="session-list empty-state">
           Previous chats will appear here.
@@ -67,7 +81,11 @@
         <section class="trace-section skills-section" aria-label="Active Skills">
           <div class="section-header compact">
             <button id="skillsToggle" class="section-toggle" type="button" aria-expanded="true" aria-controls="activeSkills">
-              <span class="toggle-icon" aria-hidden="true">▾</span>
+              <span class="toggle-icon" aria-hidden="true">
+                <svg viewBox="0 0 20 20" focusable="false">
+                  <path d="M7.5 4.5l5.5 5.5-5.5 5.5"></path>
+                </svg>
+              </span>
               <span>Active Skills</span>
             </button>
             <span id="skillsMeta" class="meta">No skills active</span>
@@ -80,7 +98,11 @@
         <section class="trace-section timeline-section" aria-label="Execution Timeline">
           <div class="section-header compact">
             <button id="timelineToggle" class="section-toggle" type="button" aria-expanded="true" aria-controls="timeline">
-              <span class="toggle-icon" aria-hidden="true">▾</span>
+              <span class="toggle-icon" aria-hidden="true">
+                <svg viewBox="0 0 20 20" focusable="false">
+                  <path d="M7.5 4.5l5.5 5.5-5.5 5.5"></path>
+                </svg>
+              </span>
               <span>Execution Timeline</span>
             </button>
             <span id="runMeta" class="meta">No run yet</span>

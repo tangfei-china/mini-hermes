@@ -219,6 +219,15 @@ function formatTokenSpeed(value) {
   return `${number.toFixed(1)} tokens/s`;
 }
 
+function formatContextUsage(usage) {
+  const total = Number(usage?.total_tokens);
+  const window = Number(usage?.context_window);
+  if (!Number.isFinite(total) || !Number.isFinite(window) || window <= 0) return "";
+  const percent = Number(usage?.context_percent);
+  const percentText = Number.isFinite(percent) ? ` · ${percent.toFixed(1)}%` : "";
+  return `context ${formatNumber(total)} / ${formatNumber(window)}${percentText}`;
+}
+
 function formatUsage(usage) {
   if (!usage) return "";
   const parts = [
@@ -226,6 +235,8 @@ function formatUsage(usage) {
     `output ${formatNumber(usage.output_tokens)}`,
     `total ${formatNumber(usage.total_tokens)}`,
   ];
+  const context = formatContextUsage(usage);
+  if (context) parts.push(context);
   const speed = formatTokenSpeed(usage.tokens_per_second);
   if (speed) parts.push(speed);
   if (usage.source === "estimated") parts.push("estimated");
@@ -569,13 +580,13 @@ function renderActiveSkills(skills, missing = []) {
 function renderSkillsCollapse() {
   skillsSection.classList.toggle("collapsed", skillsCollapsed);
   skillsToggle.setAttribute("aria-expanded", String(!skillsCollapsed));
-  skillsToggle.querySelector(".toggle-icon").textContent = skillsCollapsed ? "▸" : "▾";
+  skillsToggle.querySelector(".toggle-icon").classList.toggle("collapsed", skillsCollapsed);
 }
 
 function renderTimelineCollapse() {
   timelineSection.classList.toggle("collapsed", timelineCollapsed);
   timelineToggle.setAttribute("aria-expanded", String(!timelineCollapsed));
-  timelineToggle.querySelector(".toggle-icon").textContent = timelineCollapsed ? "▸" : "▾";
+  timelineToggle.querySelector(".toggle-icon").classList.toggle("collapsed", timelineCollapsed);
 }
 
 function showView(name) {

@@ -10,6 +10,17 @@ from .skills import Skill, SkillLoader, build_skill_catalog_prompt
 from .tools import ToolRegistry, build_default_registry
 
 
+DEFAULT_CONTEXT_WINDOWS = {
+    "gpt-4.1": 1_047_576,
+    "gpt-4.1-mini": 1_047_576,
+    "gpt-4.1-nano": 1_047_576,
+    "gpt-5": 400_000,
+    "gpt-5-mini": 400_000,
+    "gpt-5-nano": 400_000,
+    "gpt-5.5": 1_000_000,
+}
+
+
 class MiniAgent:
     def __init__(
         self,
@@ -328,9 +339,30 @@ class MiniAgent:
             "total_tokens": total_tokens,
             "source": source,
         }
+        context_window = self._context_window()
+        if context_window:
+            summary["context_window"] = context_window
+            summary["context_percent"] = round((total_tokens / context_window) * 100, 1)
         if duration_ms and duration_ms > 0 and output_tokens > 0:
             summary["tokens_per_second"] = round(output_tokens / (duration_ms / 1000), 1)
         return summary
+
+    def _context_window(self) -> int | None:
+        configured = os.getenv("MINI_HERMES_CONTEXT_WINDOW") or os.getenv("OPENAI_CONTEXT_WINDOW")
+        if configured:
+            try:
+                value = int(configured.replace("_", "").replace(",", ""))
+            except ValueError:
+                return None
+            return value if value > 0 else None
+
+        model = self.model.lower()
+        if model in DEFAULT_CONTEXT_WINDOWS:
+            return DEFAULT_CONTEXT_WINDOWS[model]
+        for prefix, window in DEFAULT_CONTEXT_WINDOWS.items():
+            if model.startswith(f"{prefix}-"):
+                return window
+        return None
 
     def _read_usage_int(self, usage: Any, *names: str) -> int | None:
         if usage is None:

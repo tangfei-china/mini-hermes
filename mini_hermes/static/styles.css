@@ -134,6 +134,7 @@ button {
   gap: 12px;
 }
 
+.icon-button,
 .toolbar-pill,
 .primary-outline,
 .ghost-button {
@@ -149,6 +150,43 @@ button {
   align-items: center;
   padding: 0 14px;
   color: #2f3b41;
+}
+
+.model-pill {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid #d3dedf;
+  border-radius: 11px;
+  padding: 0 13px 0 10px;
+  background: linear-gradient(180deg, #ffffff 0%, #f6faf9 100%);
+  color: #1f3035;
+  font-weight: 650;
+  box-shadow: 0 1px 2px rgba(23, 38, 44, 0.04);
+}
+
+.model-icon {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+}
+
+.model-icon svg,
+.icon-button svg,
+.toggle-icon svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
 }
 
 .session-pill {
@@ -216,6 +254,33 @@ button {
   flex: 1;
   overflow: auto;
   padding: 14px 12px;
+}
+
+.history-actions {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.history-new-chat {
+  min-height: 0;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-color: #7acbc6;
+  border-radius: 10px;
+  padding: 0;
+  background: linear-gradient(180deg, #ffffff 0%, #f4fbfa 100%);
+  color: var(--accent-dark);
+  box-shadow: 0 1px 2px rgba(23, 38, 44, 0.05);
+}
+
+.history-new-chat:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: 0 4px 12px rgba(0, 139, 135, 0.16);
 }
 
 .session-item {
@@ -347,21 +412,31 @@ button {
 }
 
 .toggle-icon {
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
   display: grid;
   place-items: center;
-  border: 1px solid var(--border);
-  border-radius: 7px;
+  border: 1px solid #d3dedf;
+  border-radius: 9px;
   color: var(--accent-dark);
-  background: var(--surface);
-  font-size: 14px;
-  font-weight: 900;
-  line-height: 1;
+  background: linear-gradient(180deg, #ffffff 0%, #f6faf9 100%);
+  box-shadow: 0 1px 2px rgba(23, 38, 44, 0.04);
+  transition: transform 160ms ease, background 160ms ease, border-color 160ms ease;
+}
+
+.toggle-icon:not(.collapsed) svg {
+  transform: rotate(90deg);
+}
+
+.toggle-icon svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 2.2;
+  transition: transform 160ms ease;
 }
 
 .section-toggle:hover .toggle-icon {
-  border-color: #83d2cd;
+  border-color: var(--accent);
   background: var(--accent-soft);
 }
 

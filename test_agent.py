@@ -242,6 +242,25 @@ class MiniAgentTests(unittest.TestCase):
         self.assertGreater(usage["tokens_per_second"], 0)
         self.assertEqual(usage, model_event["data"]["usage"])
 
+    def test_final_response_includes_context_window_when_configured(self):
+        class UsageClient:
+            def create(self, **kwargs):
+                message = SimpleNamespace(content="usage response", tool_calls=[])
+                usage = SimpleNamespace(prompt_tokens=11, completion_tokens=7, total_tokens=18)
+                return SimpleNamespace(choices=[SimpleNamespace(message=message)], usage=usage)
+
+        events = []
+        with patch.dict("os.environ", {"MINI_HERMES_CONTEXT_WINDOW": "1000"}, clear=True):
+            agent = MiniAgent(fake=True, trace_callback=events.append)
+            agent.client = UsageClient()
+            result = agent.run("只回答")
+
+        self.assertEqual("usage response", result)
+        final_event = next(event for event in events if event["type"] == "final_response")
+        usage = final_event["data"]["usage"]
+        self.assertEqual(1000, usage["context_window"])
+        self.assertEqual(1.8, usage["context_percent"])
+
     def test_tool_result_trace_includes_dispatch_duration(self):
         class SlowRegistry:
             def schemas(self):
